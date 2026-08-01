@@ -1,0 +1,3 @@
+pyTelegramBotApi
+yt-dlp
+flask

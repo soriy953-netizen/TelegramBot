@@ -3,13 +3,12 @@ import uuid
 from flask import Flask
 from threading import Thread
 import telebot
+from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton
 import yt_dlp
 
-# Get Telegram Bot Token from environment variables
 TOKEN = os.getenv('BOT_TOKEN')
 bot = telebot.TeleBot(TOKEN)
 
-# Initialize Flask Web Server to keep the bot alive on Render
 app = Flask('')
 
 @app.route('/')
@@ -19,54 +18,65 @@ def home():
 def run_web():
     app.run(host='0.0.0.0', port=8080)
 
-# Handle /start and /help commands
 @bot.message_handler(commands=['start', 'help'])
 def send_welcome(message):
-    bot.reply_to(message, "Welcome! Please send me a YouTube link to download the video.")
+    bot.reply_to(message, "Welcome! Please send me a YouTube link to download videos.")
 
-# Handle incoming YouTube links
+# Handle incoming YouTube links and show quality selection buttons
 @bot.message_handler(func=lambda message: True)
 def handle_message(message):
     url = message.text.strip()
     
-    # Check if the text looks like a URL
     if not url.startswith("http"):
         bot.reply_to(message, "Please send a valid YouTube link.")
         return
 
-    bot.reply_to(message, "Downloading video, please wait...")
+    # Create inline keyboard for quality selection
+    markup = InlineKeyboardMarkup()
+    markup.row_width = 2
+    # We pass URL and quality format code in callback_data
+    markup.add(
+        InlineKeyboardButton("🎬 Best Quality", callback_data=f"dl|best|{url}"),
+        InlineKeyboardButton("📱 Medium (720p/360p)", callback_data=f"dl|medium|{url}")
+    )
 
-    # Generate a unique filename using uuid to prevent file conflict errors
+    bot.reply_to(message, "⏳ Please select the video quality you want:", reply_markup=markup)
+
+# Handle button clicks for quality selection
+@bot.callback_query_handler(func=lambda call: call.data.startswith('dl|'))
+def callback_query(call):
+    data_parts = call.data.split('|')
+    quality = data_parts[1]
+    url = data_parts[2]
+
+    bot.answer_callback_query(call.id, "Downloading has started...")
+    bot.edit_message_text("⏳ Downloading video, please wait...", call.message.chat.id, call.message.message_id)
+
     unique_filename = f"video_{uuid.uuid4().hex}.mp4"
 
-    ydl_opts = {
-        'format': 'best',
-        'outtmpl': unique_filename,
-    }
+    # Select yt-dlp format based on user choice
+    if quality == 'best':
+        ydl_opts = {'format': 'best', 'outtmpl': unique_filename}
+    else:
+        ydl_opts = {'format': 'best[height<=720]', 'outtmpl': unique_filename}
 
     try:
-        # Download video using yt-dlp
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             ydl.download([url])
 
-        # Send the video back to Telegram
         with open(unique_filename, 'rb') as video_file:
-            bot.send_video(message.chat.id, video_file)
+            bot.send_video(call.message.chat.id, video_file)
 
-        bot.reply_to(message, "Download complete!")
+        bot.edit_message_text("✅ Download complete successfully!", call.message.chat.id, call.message.message_id)
 
     except Exception as e:
-        bot.reply_to(message, f"An error occurred: {e}")
+        bot.edit_message_text(f"❌ An error occurred: {e}", call.message.chat.id, call.message.message_id)
 
     finally:
-        # Clean up and delete the file from server disk after sending
         if os.path.exists(unique_filename):
             os.remove(unique_filename)
 
 if __name__ == "__main__":
-    # Start the web server in a separate background thread
     t = Thread(target=run_web)
     t.start()
-    
-    # Start the Telegram bot polling
     bot.infinity_polling()

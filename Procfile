@@ -1,3 +1,1 @@
-pyTelegramBotApi
-yt-dlp
-flask
+web: python bot.py

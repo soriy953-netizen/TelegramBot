@@ -1,141 +1,43 @@
 import os
-import uuid
-import time
-import traceback
-import requests
-import telebot
-import yt_dlp
+import threading
 from flask import Flask
-from threading import Thread
+from waitress import serve
+from telegram import Update
+from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
 
-TOKEN = os.environ.get('BOT_TOKEN', '').strip()
-if not TOKEN:
-    raise ValueError("សូមកំណត់ BOT_TOKEN ជា Environment Variable នៅក្នុង Render")
+# ------------------- Bot Token -------------------
+BOT_TOKEN = os.environ.get('BOT_TOKEN', 'YOUR_BOT_TOKEN_HERE')
 
-# បង្ហាញ token មួយផ្នែក (masked) ក្នុង logs ដើម្បីផ្ទៀងផ្ទាត់ថាតើ Render
-# ទាញយក environment variable បានត្រឹមត្រូវ ដោយមិនលាតត្រដាង token ពេញលេញ
-if len(TOKEN) > 12:
-    print(f"[DEBUG] BOT_TOKEN loaded: {TOKEN[:6]}...{TOKEN[-4:]} (length={len(TOKEN)})")
-else:
-    print(f"[DEBUG] BOT_TOKEN looks too short! length={len(TOKEN)}")
-
-RENDER_URL = os.environ.get('RENDER_URL')
-
-bot = telebot.TeleBot(TOKEN)
-
-# ------------------ Web Server (Keep-Alive) ------------------
-app = Flask('')
+# ------------------- Flask (Keep-Alive Web Server) -------------------
+app = Flask(__name__)
 
 @app.route('/')
-def home():
-    return "Bot is running online!"
+def index():
+    return 'Bot is running!', 200
 
 def run_web():
-    app.run(host='0.0.0.0', port=int(os.environ.get('PORT', 8080)))
+    serve(app, host='0.0.0.0', port=int(os.environ.get('PORT', 8080)))
 
+# ------------------- Telegram Handlers -------------------
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text("សួស្តី! Bot កំពុងដំណើរការ។")
 
-def self_ping():
-    if not RENDER_URL:
-        print("[WARN] RENDER_URL មិនទាន់កំណត់ - self-ping នឹងមិនដំណើរការ")
-        return
-    while True:
-        try:
-            requests.get(RENDER_URL, timeout=10)
-            print(f"[PING] ជោគជ័យ")
-        except Exception as e:
-            print(f"[PING] បរាជ័យ: {e}")
-        time.sleep(600)
+async def echo(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text(update.message.text)
 
+def run_bot():
+    application = Application.builder().token(BOT_TOKEN).build()
 
-# ------------------ Bot Handlers ------------------
-@bot.message_handler(commands=['start'])
-def send_welcome(message):
-    bot.reply_to(message, "សួស្តី! សូមផ្ញើលីង TikTok មកខ្ញុំ ខ្ញុំនឹងទាញយកវីដេអូឱ្យ!")
+    application.add_handler(CommandHandler("start", start))
+    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, echo))
 
+    application.run_polling()
 
-@bot.message_handler(func=lambda message: True)
-def download_video(message):
-    url = message.text.strip()
+# ------------------- Main -------------------
+if __name__ == '__main__':
+    # រត់ Flask web server ក្នុង thread ដាច់ដោយឡែក ដើម្បីកុំឱ្យវា block bot
+    web_thread = threading.Thread(target=run_web)
+    web_thread.start()
 
-    if "http" not in url:
-        bot.reply_to(message, "សូមផ្ញើលីង TikTok ត្រឹមត្រូវមក!")
-        return
-
-    is_tiktok = "tiktok.com" in url
-
-    sent_msg = bot.reply_to(message, "កំពុងទាញយកវីដេអូ, សូមរង់ចាំបន្តិច...")
-
-    filename = f"video_{uuid.uuid4().hex}.mp4"
-
-    if is_tiktok:
-        # TikTok៖ format simplified, តែងតែមាន video+audio ភ្ជាប់រួចរាល់
-        # ដូច្នេះមិនចាំបាច់ merge audio/video ដាច់ដោយឡែកទេ
-        ydl_opts = {
-            'format': 'best[ext=mp4]/best',
-            'outtmpl': filename,
-            'quiet': False,
-            'no_warnings': False,
-            'noplaylist': True,
-            'nocheckcertificate': True,
-        }
-    else:
-        # YouTube ឬវេបសាយផ្សេង៖ ត្រូវការ format ស្មុគស្មាញជាង
-        ydl_opts = {
-            'format': 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best',
-            'merge_output_format': 'mp4',
-            'outtmpl': filename,
-            'quiet': False,
-            'no_warnings': False,
-            'noplaylist': True,
-            'extractor_args': {
-                'youtube': {
-                    'player_client': ['android'],
-                }
-            },
-            'nocheckcertificate': True,
-        }
-
-        cookie_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'cookies.txt')
-        if os.path.exists(cookie_path) and os.path.getsize(cookie_path) > 100:
-            ydl_opts['cookiefile'] = cookie_path
-
-    try:
-        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            ydl.download([url])
-
-        file_size = os.path.getsize(filename)
-        max_size = 50 * 1024 * 1024  # 50MB (Telegram Bot API limit)
-
-        if file_size > max_size:
-            bot.reply_to(message, "វីដេអូនេះធំពេក (លើស 50MB) មិនអាចផ្ញើតាម Telegram Bot បានទេ។")
-        else:
-            with open(filename, 'rb') as video:
-                bot.send_video(message.chat.id, video, timeout=120)
-
-    except Exception as e:
-        print("[ERROR] Download failed:")
-        print(traceback.format_exc())
-        bot.reply_to(message, f"មានបញ្ហាពេលទាញយក៖ {e}")
-
-    finally:
-        if os.path.exists(filename):
-            os.remove(filename)
-        try:
-            bot.delete_message(message.chat.id, sent_msg.message_id)
-        except Exception:
-            pass
-
-
-# ------------------ Main ------------------
-if __name__ == "__main__":
-    print("Bot is running...")
-
-    t_web = Thread(target=run_web)
-    t_web.daemon = True
-    t_web.start()
-
-    t_ping = Thread(target=self_ping)
-    t_ping.daemon = True
-    t_ping.start()
-
-    bot.infinity_polling(skip_pending=True, timeout=60)
+    # រត់ Telegram bot (polling) នៅ main thread
+    run_bot()

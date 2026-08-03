@@ -8,9 +8,16 @@ import yt_dlp
 from flask import Flask
 from threading import Thread
 
-TOKEN = os.environ.get('BOT_TOKEN')
+TOKEN = os.environ.get('BOT_TOKEN', '').strip()
 if not TOKEN:
     raise ValueError("សូមកំណត់ BOT_TOKEN ជា Environment Variable នៅក្នុង Render")
+
+# បង្ហាញ token មួយផ្នែក (masked) ក្នុង logs ដើម្បីផ្ទៀងផ្ទាត់ថាតើ Render
+# ទាញយក environment variable បានត្រឹមត្រូវ ដោយមិនលាតត្រដាង token ពេញលេញ
+if len(TOKEN) > 12:
+    print(f"[DEBUG] BOT_TOKEN loaded: {TOKEN[:6]}...{TOKEN[-4:]} (length={len(TOKEN)})")
+else:
+    print(f"[DEBUG] BOT_TOKEN looks too short! length={len(TOKEN)}")
 
 RENDER_URL = os.environ.get('RENDER_URL')
 

@@ -22,11 +22,9 @@ def home():
 def run_web():
     app.run(host='0.0.0.0', port=int(os.environ.get('PORT', 8080)))
 
-
 @bot.message_handler(commands=['start'])
 def send_welcome(message):
     bot.reply_to(message, "សួស្តី! សូមផ្ញើលីង TikTok ឬ YouTube មកខ្ញុំ ខ្ញុំនឹងទាញយកវីដេអូឱ្យ!")
-
 
 @bot.message_handler(func=lambda message: True)
 def download_video(message):
@@ -44,7 +42,7 @@ def download_video(message):
         'format': 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best',
         'merge_output_format': 'mp4',
         'outtmpl': filename,
-        'quiet': False,       # <-- បើក log ពេញលេញនៅក្នុង Render console ដើម្បី debug
+        'quiet': False,
         'no_warnings': False,
         'noplaylist': True,
         'extractor_args': {
@@ -55,7 +53,6 @@ def download_video(message):
         'nocheckcertificate': True,
     }
 
-    # ប្រើ absolute path ដើម្បីប្រាកដថារកឃើញ file ត្រូវ មិនថា working directory ជាអ្វី
     cookie_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'cookies.txt')
     print(f"[DEBUG] Looking for cookies at: {cookie_path}")
 
@@ -83,7 +80,6 @@ def download_video(message):
                 bot.send_video(message.chat.id, video, timeout=120)
 
     except Exception as e:
-        # បង្ហាញ full traceback ក្នុង Render logs ដើម្បីឃើញមូលហេតុពិតប្រាកដ
         print("[ERROR] Download failed:")
         print(traceback.format_exc())
         bot.reply_to(message, f"មានបញ្ហាពេលទាញយក៖ {e}")
@@ -95,7 +91,6 @@ def download_video(message):
             bot.delete_message(message.chat.id, sent_msg.message_id)
         except Exception:
             pass
-
 
 if __name__ == "__main__":
     print("Bot is running...")

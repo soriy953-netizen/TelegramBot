@@ -1,4 +1,3 @@
-pyTelegramBotAPI
-yt-dlp
-flask
+Flask
 waitress
+python-telegram-bot

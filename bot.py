@@ -13,7 +13,6 @@ if not TOKEN:
     raise ValueError("សូមកំណត់ BOT_TOKEN ជា Environment Variable នៅក្នុង Render")
 
 # URL សាធារណៈរបស់ Render service (ឧទាហរណ៍ https://telegrambot-33p5.onrender.com)
-# ត្រូវកំណត់ជា Environment Variable ឈ្មោះ RENDER_URL នៅក្នុង Render dashboard
 RENDER_URL = os.environ.get('RENDER_URL')
 
 bot = telebot.TeleBot(TOKEN)
@@ -28,12 +27,10 @@ def home():
 def run_web():
     app.run(host='0.0.0.0', port=int(os.environ.get('PORT', 8080)))
 
-
 def self_ping():
     """
     ផ្ញើ request ទៅខ្លួនឯងរៀងរាល់ 10 នាទី ដើម្បីកុំឲ្យ Render Free tier
-    ដាក់ service ចូល sleep ដោយសារ inactive។ ចាំបាច់ត្រូវកំណត់
-    RENDER_URL ជា environment variable ជាមុនសិន។
+    ដាក់ service ចូល sleep ដោយសារ inactive។
     """
     if not RENDER_URL:
         print("[WARN] RENDER_URL មិនទាន់កំណត់ - self-ping នឹងមិនដំណើរការ")
@@ -134,6 +131,5 @@ if __name__ == "__main__":
     t_ping.daemon = True
     t_ping.start()
 
-    # Main thread: Telegram polling loop (រត់ជានិច្ច ទោះកុំព្យូទ័រអ្នកបិទក៏ដោយ
-    # ព្រោះ process នេះស្ថិតនៅលើ Render server មិនមែនលើកុំព្យូទ័រអ្នកទេ)
+    # Main thread: Telegram polling loop
     bot.infinity_polling(skip_pending=True, timeout=60)
